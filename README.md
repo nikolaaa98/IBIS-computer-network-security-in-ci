@@ -11,3 +11,16 @@
 4. python src/modbus_server.py
    python src/modbus_client.py
    sudo python src/mitm_attack.py
+
+# Running using scripts (without UI)
+1. chmod +x run_local.sh stop_local.sh
+2. run script ./run_local.sh 15002 1502
+3. check logs tail -f logs/modbus_server.log logs/modbus_proxy.log logs/modbus_client.log
+4. stop process ./stop_local.sh
+
+# Running using scripts (with UI)
+1. chmod +x run_with_ui.sh stop_local_ui.sh
+2. run script ./run_with_ui.sh 15002 1502 8080
+3. check browser : http://127.0.0.1:8080
+3. check logs tail -n 30 logs/ui_server.log
+4. stop process ./stop_local_ui.sh
