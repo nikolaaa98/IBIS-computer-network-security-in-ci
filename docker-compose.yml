@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  modbus_server:
+    build: .
+    container_name: modbus_server
+    image: ibis_modbus:latest
+    volumes:
+      - ./src:/app:ro
+    working_dir: /app
+    command: python modbus_server.py
+    networks:
+      ot_network:
+        ipv4_address: 172.20.0.2
+
+  modbus_proxy:
+    build: .
+    container_name: modbus_proxy
+    image: ibis_modbus:latest
+    volumes:
+      - ./src:/app:ro
+    working_dir: /app
+    # Proxy listens on port 1502 inside container; expose for host debugging if needed
+    ports:
+      - "1502:1502"
+    command: python mitm_proxy.py --proxy-host 0.0.0.0 --proxy-port 1502 --server-host 172.20.0.2 --server-port 502
+    networks:
+      ot_network:
+        ipv4_address: 172.20.0.4
+
+  modbus_client:
+    build: .
+    container_name: modbus_client
+    image: ibis_modbus:latest
+    volumes:
+      - ./src:/app:ro
+    working_dir: /app
+    # the client will connect to the proxy service (modbus_proxy:1502)
+    command: python modbus_client.py --host modbus_proxy --port 1502 --interval 3
+    networks:
+      ot_network:
+        ipv4_address: 172.20.0.3
+
+# Optional: if you want to run the defense monitor as a container, uncomment and
+# be aware sniffing in containers may need additional capabilities (NET_ADMIN / NET_RAW)
+#  defense_module:
+#    build: .
+#    container_name: defense_module
+#    image: ibis_modbus:latest
+#    volumes:
+#      - ./src:/app:ro
+#    working_dir: /app
+#    cap_add:
+#      - NET_RAW
+#    privileged: false
+#    command: python defense_module.py --iface eth0
+#    networks:
+#      ot_network:
+#        ipv4_address: 172.20.0.5
+
+networks:
+  ot_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24

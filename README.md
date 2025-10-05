@@ -1,6 +1,6 @@
-# IBIS-computer-network-security-in-ci
+# IBIS Project - Network Security in Critical Infrastructure
 
-## Running (Docker)
+## Running with Docker
 1. docker-compose up --build
 2. docker-compose down
 
