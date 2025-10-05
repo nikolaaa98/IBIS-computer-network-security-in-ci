@@ -12,6 +12,11 @@ from pyModbusTCP.server import ModbusServer, DataBank
 from pyModbusTCP.client import ModbusClient
 import threading, time, logging, argparse
 
+import os, json
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CONTROL_FILE = os.path.join(ROOT, "control.json")
+
+
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
 DEFAULT_PROXY_HOST = '0.0.0.0'
@@ -63,6 +68,17 @@ class ModbusProxy:
         logging.info('Proxy connected to real server %s:%s', self.server_host, self.server_port)
         while self.running:
             try:
+                # --- dynamic control via control.json (UI) ---
+                try:
+                    if os.path.exists(CONTROL_FILE):
+                        with open(CONTROL_FILE, "r") as f:
+                            c = json.load(f)
+                        # ensure boolean
+                        self.manipulate = bool(c.get("manipulate", self.manipulate))
+                except Exception:
+                    pass
+                # -------------------------------------------
+
                 regs = self.client.read_holding_registers(0, 10)
                 if regs:
                     copied = list(regs)
@@ -89,6 +105,7 @@ class ModbusProxy:
                     except:
                         time.sleep(1)
             time.sleep(self.sync_interval)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Modbus proxy (safe MITM simulator)')

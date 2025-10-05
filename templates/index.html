@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>IBIS Demo UI</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 18px; }
+    .card { border: 1px solid #ddd; padding: 12px; border-radius: 6px; margin-bottom: 12px; }
+    .big { font-size: 2.2rem; font-weight: bold; }
+    pre { background:#111; color:#0f0; padding:10px; max-height: 300px; overflow:auto; }
+    .btn { padding:8px 12px; border-radius:6px; text-decoration:none; color:white; background:#007acc; display:inline-block; }
+    .btn-danger { background:#d9534f; }
+  </style>
+</head>
+<body>
+  <h1>IBIS — Demo UI</h1>
+
+  <div class="card">
+    <h3>Trenutna vrednost (register 0) — proxy: {{ proxy_host }}:{{ proxy_port }}</h3>
+    <div class="big">{{ value if value is not none else "N/A" }} °C</div>
+  </div>
+
+  <div class="card">
+    <h3>Manipulacija</h3>
+    <p>Trenutno: <strong>{{ 'ON' if control.manipulate else 'OFF' }}</strong></p>
+    <form method="post" action="/toggle">
+      <button class="btn" type="submit">{{ 'Disable' if control.manipulate else 'Enable' }}</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Direktno upisivanje (test)</h3>
+    <form method="post" action="/write">
+      <label>Vrednost (reg 0): <input name="value" type="number" value="0"/></label>
+      <input type="hidden" name="host" value="{{ proxy_host }}"/>
+      <input type="hidden" name="port" value="{{ proxy_port }}"/>
+      <button class="btn btn-danger" type="submit">Write</button>
+    </form>
+    <small>Ovo koristi lokalni helper za pisanje u registar - SAMO za testbed.</small>
+  </div>
+
+  <div class="card">
+    <h3>Logs (poslednjih linija)</h3>
+    <pre id="logs">{{ logs | join("\n") }}</pre>
+  </div>
+
+  <script>
+    // auto-refresh value every 2s
+    setInterval(function(){
+      fetch('/api/value')
+        .then(r => r.json())
+        .then(d => {
+          document.querySelector('.big').innerText = (d.value !== null && typeof d.value !== 'undefined') ? d.value + ' °C' : 'N/A';
+        }).catch(()=>{});
+    }, 2000);
+  </script>
+</body>
+</html>
