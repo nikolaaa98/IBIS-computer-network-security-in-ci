@@ -3,60 +3,103 @@ version: '3.8'
 services:
   modbus_server:
     build: .
-    container_name: modbus_server
+    container_name: ibis_modbus_server
     image: ibis_modbus:latest
+    working_dir: /app/src
     volumes:
-      - ./src:/app:ro
-    working_dir: /app
-    command: python modbus_server.py
+      - ./src:/app/src:ro
+      - ./logs:/app/logs
+      - ./pids:/app/pids
+      - ./control.json:/app/control.json:rw
+      - ./templates:/app/templates:ro
+    command: ["python", "modbus_server.py", "--host", "0.0.0.0", "--port", "502"]
     networks:
       ot_network:
         ipv4_address: 172.20.0.2
+    restart: unless-stopped
 
   modbus_proxy:
     build: .
-    container_name: modbus_proxy
+    container_name: ibis_modbus_proxy
     image: ibis_modbus:latest
+    working_dir: /app/src
     volumes:
-      - ./src:/app:ro
-    working_dir: /app
-    # Proxy listens on port 1502 inside container; expose for host debugging if needed
+      - ./src:/app/src:ro
+      - ./logs:/app/logs
+      - ./pids:/app/pids
+      - ./control.json:/app/control.json:rw
+      - ./templates:/app/templates:ro
+    # map proxy port to host for debugging / HMI access
     ports:
       - "1502:1502"
-    command: python mitm_proxy.py --proxy-host 0.0.0.0 --proxy-port 1502 --server-host 172.20.0.2 --server-port 502
+    command: ["python", "mitm_proxy.py", "--proxy-host", "0.0.0.0", "--proxy-port", "1502", "--server-host", "172.20.0.2", "--server-port", "502"]
     networks:
       ot_network:
         ipv4_address: 172.20.0.4
+    depends_on:
+      - modbus_server
+    restart: unless-stopped
 
   modbus_client:
     build: .
-    container_name: modbus_client
+    container_name: ibis_modbus_client
     image: ibis_modbus:latest
+    working_dir: /app/src
     volumes:
-      - ./src:/app:ro
-    working_dir: /app
-    # the client will connect to the proxy service (modbus_proxy:1502)
-    command: python modbus_client.py --host modbus_proxy --port 1502 --interval 3
+      - ./src:/app/src:ro
+      - ./logs:/app/logs
+      - ./pids:/app/pids
+      - ./control.json:/app/control.json:rw
+      - ./templates:/app/templates:ro
+    command: ["python", "modbus_client.py", "--host", "modbus_proxy", "--port", "1502", "--interval", "3"]
     networks:
       ot_network:
         ipv4_address: 172.20.0.3
+    depends_on:
+      - modbus_proxy
+    restart: unless-stopped
 
-# Optional: if you want to run the defense monitor as a container, uncomment and
-# be aware sniffing in containers may need additional capabilities (NET_ADMIN / NET_RAW)
-#  defense_module:
-#    build: .
-#    container_name: defense_module
-#    image: ibis_modbus:latest
-#    volumes:
-#      - ./src:/app:ro
-#    working_dir: /app
-#    cap_add:
-#      - NET_RAW
-#    privileged: false
-#    command: python defense_module.py --iface eth0
-#    networks:
-#      ot_network:
-#        ipv4_address: 172.20.0.5
+  ui_server:
+    build: .
+    container_name: ibis_ui_server
+    image: ibis_modbus:latest
+    working_dir: /app/src
+    volumes:
+      - ./src:/app/src:ro
+      - ./templates:/app/templates:ro
+      - ./logs:/app/logs
+      - ./pids:/app/pids
+      - ./control.json:/app/control.json:rw
+    ports:
+      - "${UI_PORT:-8080}:8080"
+    environment:
+      - PROXY_HOST=modbus_proxy
+      - PROXY_PORT=1502
+    command: ["python", "ui_server.py", "--proxy-host", "modbus_proxy", "--proxy-port", "1502", "--bind", "0.0.0.0", "--port", "8080"]
+    depends_on:
+      - modbus_proxy
+    restart: unless-stopped
+
+  # optional: defense monitor (sniffing) - requires extra capabilities
+  defense_module:
+    build: .
+    container_name: ibis_defense_module
+    image: ibis_modbus:latest
+    working_dir: /app/src
+    volumes:
+      - ./src:/app/src:ro
+      - ./logs:/app/logs
+      - ./pids:/app/pids
+      - ./control.json:/app/control.json:rw
+      - ./templates:/app/templates:ro
+    command: ["python", "defense_module.py", "--iface", "eth0"]
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    networks:
+      ot_network:
+        ipv4_address: 172.20.0.5
+    restart: "no"
 
 networks:
   ot_network:

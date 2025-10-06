@@ -1,4 +1,4 @@
-# Dockerfile - Python image for all services
+# Dockerfile - base image for IBIS demo services
 FROM python:3.10-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -6,13 +6,16 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# copy requirements first for better caching
+# copy only requirements first for Docker layer caching
 COPY requirements.txt /app/requirements.txt
-RUN pip install --upgrade pip
-RUN pip install -r /app/requirements.txt
+RUN pip install --upgrade pip && \
+    pip install -r /app/requirements.txt
 
-# copy source
-COPY ./src /app
+# create app dir layout (actual code will be mounted by docker-compose)
+RUN mkdir -p /app/src /app/logs /app/pids /app/templates
 
-# default command (can be overridden by docker-compose)
-CMD ["python", "modbus_server.py"]
+# default workdir - note: docker-compose will set working_dir per service
+WORKDIR /app
+
+# default command - not used (overridden by compose)
+CMD ["sleep", "infinity"]
