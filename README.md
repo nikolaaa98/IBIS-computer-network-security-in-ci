@@ -11,12 +11,12 @@ UI_PORT=8080 docker-compose up --build -d
 docker-compose logs -f ui_server modbus_proxy modbus_server modbus_client
 ```
 
-3. docker stop
+# 3. docker stop
 ```
 docker-compose down
 ```
 
-4. delete artifactes
+# 4. delete artifactes
 ```
 docker-compose down --volumes --remove-orphans
 ```
