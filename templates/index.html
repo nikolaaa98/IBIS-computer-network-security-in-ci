@@ -10,14 +10,21 @@
     pre { background:#111; color:#0f0; padding:10px; max-height: 300px; overflow:auto; }
     .btn { padding:8px 12px; border-radius:6px; text-decoration:none; color:white; background:#007acc; display:inline-block; }
     .btn-danger { background:#d9534f; }
+    .value-row { margin-bottom: 10px; }
   </style>
 </head>
 <body>
   <h1>IBIS — Demo UI</h1>
 
   <div class="card">
-    <h3>Trenutna vrednost (register 0) — proxy: {{ proxy_host }}:{{ proxy_port }}</h3>
-    <div class="big">{{ value if value is not none else "N/A" }} °C</div>
+    <h3>Trenutne vrednosti (registri 0-2) — proxy: {{ proxy_host }}:{{ proxy_port }}</h3>
+    {% if values %}
+      <div class="value-row"><span class="big" id="temp">{{ values.temperature }} °C</span> (Temperatura, reg 0)</div>
+      <div class="value-row"><span class="big" id="humidity">{{ values.humidity }} %</span> (Vlažnost, reg 1)</div>
+      <div class="value-row"><span class="big" id="pressure">{{ values.pressure }} hPa</span> (Pritisak, reg 2)</div>
+    {% else %}
+      <div class="big">N/A</div>
+    {% endif %}
   </div>
 
   <div class="card">
@@ -31,12 +38,14 @@
   <div class="card">
     <h3>Direktno upisivanje (test)</h3>
     <form method="post" action="/write">
-      <label>Vrednost (reg 0): <input name="value" type="number" value="0"/></label>
+      <label>Temperatura (reg 0, 0-100): <input name="temp" type="number" min="0" max="100"/></label><br>
+      <label>Vlažnost (reg 1, 0-100): <input name="humidity" type="number" min="0" max="100"/></label><br>
+      <label>Pritisak (reg 2, 900-1100): <input name="pressure" type="number" min="900" max="1100"/></label><br>
       <input type="hidden" name="host" value="{{ proxy_host }}"/>
       <input type="hidden" name="port" value="{{ proxy_port }}"/>
       <button class="btn btn-danger" type="submit">Write</button>
     </form>
-    <small>Ovo koristi lokalni helper za pisanje u registar - SAMO za testbed.</small>
+    <small>Ovo koristi lokalni helper za pisanje u registre - SAMO za testbed.</small>
   </div>
 
   <div class="card">
@@ -45,12 +54,15 @@
   </div>
 
   <script>
-    // auto-refresh value every 2s
+    // Auto-refresh values every 2s
     setInterval(function(){
       fetch('/api/value')
         .then(r => r.json())
         .then(d => {
-          document.querySelector('.big').innerText = (d.value !== null && typeof d.value !== 'undefined') ? d.value + ' °C' : 'N/A';
+          const values = d.values;
+          document.querySelector('#temp').innerText = (values && values.temperature !== null && typeof values.temperature !== 'undefined') ? values.temperature + ' °C' : 'N/A';
+          document.querySelector('#humidity').innerText = (values && values.humidity !== null && typeof values.humidity !== 'undefined') ? values.humidity + ' %' : 'N/A';
+          document.querySelector('#pressure').innerText = (values && values.pressure !== null && typeof values.pressure !== 'undefined') ? values.pressure + ' hPa' : 'N/A';
         }).catch(()=>{});
     }, 2000);
   </script>

@@ -23,7 +23,7 @@ def run_client(target_host='modbus_server', target_port=502, poll_interval=3):
         while True:
             regs = client.read_holding_registers(0, 1)
             if regs:
-                logging.info(f'[CLIENT] Current temperature read from register 0: {regs[0]} °C')
+                logging.info(f'[CLIENT] Temperature: {regs[0]} °C, Humidity: {regs[1]}%, Pressure: {regs[2]} hPa (registers 0-2)')
             else:
                 logging.warning('No registers read (None)')
             time.sleep(poll_interval)

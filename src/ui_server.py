@@ -24,8 +24,8 @@ def read_register(proxy_host, proxy_port):
     try:
         if not client.open():
             return None
-        regs = client.read_holding_registers(0, 1)
-        return regs[0] if regs else None
+        regs = client.read_holding_registers(0, 3)  # Read registers 0-2
+        return {"temperature": regs[0], "humidity": regs[1], "pressure": regs[2]} if regs else None
     except Exception as e:
         logging.error(f"Greška pri čitanju registra: {e}")
         return None
