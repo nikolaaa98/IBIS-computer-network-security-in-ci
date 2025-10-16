@@ -1,0 +1,13 @@
+This should be deleted!!!
+Check before starting dos attack
+ netstat -an | findstr :502 | findstr ESTABLISHED
+ Should be few only
+
+ Run dos attack
+ python src/modbus_dos_attack.py --target 127.0.0.1 --port 502 --attack all --threads 150 --duration 30
+
+ Check again
+  netstat -an | findstr :502 | findstr ESTABLISHED
+Our modbus, has autoreconnect (protection from this, but it still works)
+
+
