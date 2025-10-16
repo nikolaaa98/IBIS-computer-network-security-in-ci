@@ -7,8 +7,16 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VENV_DIR="$ROOT_DIR/.venv"
-PYTHON="$VENV_DIR/bin/python"
-PIP="$VENV_DIR/bin/pip"
+
+# Cross-platform venv paths (Windows uses Scripts, Unix uses bin)
+if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]] || [[ "$OSTYPE" == "cygwin" ]]; then
+    VENV_BIN="Scripts"
+else
+    VENV_BIN="bin"
+fi
+
+PYTHON="$VENV_DIR/$VENV_BIN/python"
+PIP="$VENV_DIR/$VENV_BIN/pip"
 
 SERVER_PORT="${1:-502}"
 PROXY_PORT="${2:-1502}"
