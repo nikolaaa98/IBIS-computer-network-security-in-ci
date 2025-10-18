@@ -12,10 +12,12 @@ def run_server(host='0.0.0.0', port=502, interval=3):
         server.start()
         logging.info('Modbus server started on %s:%s', host, port)
         while True:
-            temperature = random.randint(20, 100)
-            # store temperature in holding register 0
-            DataBank.set_words(0, [temperature])
-            logging.info(f'[SERVER] Temperature set to {temperature} °C (holding register 0)')
+            temperature = random.randint(20, 100)  # Temperature in °C
+            humidity = random.randint(0, 100)  # Humidity in %
+            pressure = random.randint(900, 1100)  # Pressure in hPa
+            # Store temperature in register 0, humidity in register 1, pressure in register 2
+            DataBank.set_words(0, [temperature, humidity, pressure])
+            logging.info(f'[SERVER] Temperature set to {temperature} °C, Humidity set to {humidity}%, Pressure set to {pressure} hPa (holding registers 0, 1, 2)')
             time.sleep(interval)
     except KeyboardInterrupt:
         logging.info('Stopping server...')
