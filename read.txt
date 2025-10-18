@@ -18,7 +18,7 @@ python src/modbus_server.py --port 502
 python src/modbus_client.py --host 127.0.0.1 --port 502
 
 Scan phase
-python modbus_recon_inject.py --target 127.0.0.1 --port 502 --mode scan
+python src/modbus_recon_inject.py --target 127.0.0.1 --port 502 --mode scan
 
 OUTPUT:
 [INFO] [RECON] Scanning registers on 127.0.0.1:502
