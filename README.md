@@ -47,3 +47,24 @@ docker-compose down --volumes --remove-orphans
 3. check logs tail -n 30 logs/ui_server.log
 4. stop process ./stop_local_ui.sh
 ```
+
+# 5. HOW TO RUN (MAC OS)
+```
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+chmod +x run_with_ui_mac.sh stop_demo_mac.sh
+./run_with_ui_mac.sh 
+```
+
+# 5. HOW TO RUN (WINDOWS)
+```
+# Create virtual environment
+python -m venv .venv
+# Activate virtual environment
+.\.venv\Scripts\Activate.ps1
+# Install requirements
+pip install -r requirements.txt
+# Run the demo
+.\run_with_ui_mac.sh
+```
