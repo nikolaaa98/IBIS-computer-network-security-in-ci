@@ -244,24 +244,42 @@ Examples:
     parser.add_argument('--port', type=int, default=502, help='Target port')
     parser.add_argument('--mode', choices=['scan', 'inject', 'raw_funcs', 'full'],
                        default='scan', help='Attack mode')
+    parser.add_argument('--auto-confirm', action='store_true', help='Auto confirm attack without prompt')
     
     args = parser.parse_args()
     
-    print('='*60)
-    print('WARNING: This tool performs attacks on Modbus systems.')
-    print('It can disrupt operations and damage equipment.')
-    print('USE ONLY in isolated lab environments you control.')
-    print('='*60)
-    response = input(f'Attack {args.target}:{args.port} with mode {args.mode}? (yes/no): ')
-    
-    if response.lower() != 'yes':
-        print('Attack cancelled.')
-        exit(0)
-    
-    recon = ModbusRecon(
-        target_host=args.target,
-        target_port=args.port,
-        attack_mode=args.mode
-    )
-    
-    recon.run()
+    # Auto-confirm for localhost or when --auto-confirm is set
+    if args.target in ['127.0.0.1', 'localhost'] or args.auto_confirm:
+        print('='*60)
+        print('WARNING: This tool performs attacks on Modbus systems.')
+        print('It can disrupt operations and damage equipment.')
+        print('USE ONLY in isolated lab environments you control.')
+        print('='*60)
+        print(f'Attacking {args.target}:{args.port} with mode {args.mode}')
+        
+        recon = ModbusRecon(
+            target_host=args.target,
+            target_port=args.port,
+            attack_mode=args.mode
+        )
+        
+        recon.run()
+    else:
+        print('='*60)
+        print('WARNING: This tool performs attacks on Modbus systems.')
+        print('It can disrupt operations and damage equipment.')
+        print('USE ONLY in isolated lab environments you control.')
+        print('='*60)
+        response = input(f'Attack {args.target}:{args.port} with mode {args.mode}? (yes/no): ')
+        
+        if response.lower() != 'yes':
+            print('Attack cancelled.')
+            exit(0)
+        
+        recon = ModbusRecon(
+            target_host=args.target,
+            target_port=args.port,
+            attack_mode=args.mode
+        )
+        
+        recon.run()

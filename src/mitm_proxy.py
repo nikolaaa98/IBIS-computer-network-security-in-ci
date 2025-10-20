@@ -23,7 +23,7 @@ DEFAULT_PROXY_HOST = '0.0.0.0'
 DEFAULT_PROXY_PORT = 1502
 DEFAULT_SERVER_HOST = '127.0.0.1'
 DEFAULT_SERVER_PORT = 502
-DEFAULT_SYNC_INTERVAL = 1.5
+DEFAULT_SYNC_INTERVAL = 0.5
 
 class ModbusProxy:
     def __init__(self, proxy_host, proxy_port, server_host, server_port, sync_interval, manipulate):

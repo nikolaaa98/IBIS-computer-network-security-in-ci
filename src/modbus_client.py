@@ -13,7 +13,6 @@ def run_client(target_host='modbus_server', target_port=502, poll_interval=3):
     client = ModbusClient(host=target_host, port=target_port, auto_open=True, auto_close=False)
     logging.info('Modbus client initialized to %s:%s', target_host, target_port)
 
-    # čekaj da se server otvori
     while not client.is_open():
         logging.info('Waiting for server...')
         try:
@@ -25,7 +24,6 @@ def run_client(target_host='modbus_server', target_port=502, poll_interval=3):
 
     try:
         while True:
-            # čita 3 registra: 0, 1, 2
             regs = client.read_holding_registers(0, 3)
 
             if regs and len(regs) >= 3:
