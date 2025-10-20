@@ -14,29 +14,33 @@ def write_register(host, port, temp=None, humidity=None, pressure=None):
         return False
     
     success = True
+    written_count = 0
+    
     try:
         if temp is not None and temp != '':
             temp_int = int(temp)
-            if not (0 <= temp_int <= 100):  # Validate temperature range
+            if not (0 <= temp_int <= 100):
                 logging.error('Temperature must be between 0 and 100 °C')
                 success = False
             else:
                 ok = client.write_single_register(0, temp_int)
                 if ok:
                     logging.info('Wrote temperature %s °C to register 0', temp_int)
+                    written_count += 1
                 else:
                     logging.error('Failed to write temperature to register 0')
                     success = False
 
         if humidity is not None and humidity != '':
             humidity_int = int(humidity)
-            if not (0 <= humidity_int <= 100): 
+            if not (0 <= humidity_int <= 100):
                 logging.error('Humidity must be between 0 and 100%')
                 success = False
             else:
                 ok = client.write_single_register(1, humidity_int)
                 if ok:
                     logging.info('Wrote humidity %s%% to register 1', humidity_int)
+                    written_count += 1
                 else:
                     logging.error('Failed to write humidity to register 1')
                     success = False
@@ -50,10 +54,15 @@ def write_register(host, port, temp=None, humidity=None, pressure=None):
                 ok = client.write_single_register(2, pressure_int)
                 if ok:
                     logging.info('Wrote pressure %s hPa to register 2', pressure_int)
+                    written_count += 1
                 else:
                     logging.error('Failed to write pressure to register 2')
                     success = False
 
+        if written_count == 0:
+            logging.warning('No values were written - all fields were empty')
+            success = False
+            
     except ValueError as e:
         logging.error('Invalid value provided: %s', e)
         success = False
