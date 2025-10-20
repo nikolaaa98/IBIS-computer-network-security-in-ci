@@ -7,6 +7,7 @@ import subprocess
 import psutil
 from datetime import datetime
 from pyModbusTCP.client import ModbusClient
+import threading
 import sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -17,12 +18,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATES_DIR = os.path.join(ROOT, "templates")
 CONTROL_FILE = os.path.join(ROOT, "control.json")
 LOG_DIR = os.path.join(ROOT, "logs")
+PCAP_DIR = os.path.join(ROOT, "wireshark_captures")
 
 app = Flask(__name__, template_folder=TEMPLATES_DIR)
 
 active_attacks = []
 defense_enabled = False
 defense_process = None
+pcap_process = None
 
 def read_control():
     if not os.path.exists(CONTROL_FILE):
@@ -41,13 +44,74 @@ def write_control(manipulate):
     except:
         pass
 
+def start_pcap_capture():
+    """Start simplified packet capture using tcpdump if available"""
+    global pcap_process
+    
+    try:
+        # Create pcap directory
+        os.makedirs(PCAP_DIR, exist_ok=True)
+        
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        pcap_file = os.path.join(PCAP_DIR, f"modbus_traffic_{timestamp}.pcap")
+        
+        logging.info(f"Starting packet capture: {pcap_file}")
+        
+        # Try to use tcpdump if available
+        try:
+            # Check if tcpdump is available
+            result = subprocess.run(['which', 'tcpdump'], capture_output=True, text=True)
+            if result.returncode == 0:
+                pcap_process = subprocess.Popen([
+                    'tcpdump', 
+                    '-i', 'lo0',  # loopback interface on macOS
+                    '-w', pcap_file,
+                    'port', '502', 'or', 'port', '1502', 'or', 'port', '5020', 'or', 'port', '8502'
+                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                logging.info("Started tcpdump capture on lo0 interface")
+                return True
+        except Exception as e:
+            logging.warning(f"tcpdump not available: {e}")
+        
+        # Fallback: create empty pcap file with header
+        try:
+            with open(pcap_file, 'wb') as f:
+                # Write minimal pcap header
+                f.write(b'\xd4\xc3\xb2\xa1\x02\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x00\x00\x01\x00\x00\x00')
+            logging.info(f"Created empty pcap file: {pcap_file}")
+            logging.info("Note: Install tcpdump for actual packet capture")
+            return True
+        except Exception as e:
+            logging.error(f"Failed to create pcap file: {e}")
+            return False
+        
+    except Exception as e:
+        logging.error(f"Failed to start packet capture: {e}")
+        return False
+
+def stop_pcap_capture():
+    """Stop packet capture"""
+    global pcap_process
+    
+    try:
+        if pcap_process:
+            pcap_process.terminate()
+            pcap_process.wait(timeout=5)
+            pcap_process = None
+            logging.info("Stopped packet capture")
+        return True
+    except Exception as e:
+        logging.error(f"Error stopping packet capture: {e}")
+        return False
+
 def read_all_values():
-    """Čita vrednosti SA SERVERA i SA PROXY-ja sa DELAY"""
+    """Read values from SERVER and PROXY with DELAY"""
     server_values = {}
     client_values = {}
     
     try:
-        # Čitanje direktno sa servera (prave vrednosti)
+        # Read directly from server (real values)
         server_client = ModbusClient(host='127.0.0.1', port=5020, timeout=1)
         if server_client.open():
             server_regs = server_client.read_holding_registers(0, 3)
@@ -63,11 +127,11 @@ def read_all_values():
         logging.error(f"Error reading server values: {e}")
         pass
     
-    # DELAY između čitanja servera i klijenta
+    # DELAY between server and client reading
     time.sleep(0.1)
     
     try:
-        # Čitanje preko proxy-ja (ono što klijent vidi)
+        # Read through proxy (what client sees)
         proxy_client = ModbusClient(host='127.0.0.1', port=1502, timeout=1)
         if proxy_client.open():
             client_regs = proxy_client.read_holding_registers(0, 3)
@@ -83,7 +147,7 @@ def read_all_values():
         logging.error(f"Error reading client values: {e}")
         pass
     
-    # Ako nema podataka, vrati default
+    # Fallback values if no data
     if not server_values:
         server_values = {'temperature': 25, 'humidity': 50, 'pressure': 1013, 'source': 'SERVER'}
     if not client_values:
@@ -96,18 +160,18 @@ def read_all_values():
     }
 
 def detect_manipulation(server_vals, client_vals):
-    """Poboljšana detekcija manipulacije"""
+    """Improved manipulation detection"""
     if not server_vals or not client_vals:
         return False
     
     control = read_control()
     manipulation_enabled = control.get('manipulate', False)
     
-    # Ako je manipulacija isključena, nemoj detektovati
+    # If manipulation is disabled, don't detect
     if not manipulation_enabled:
         return False
     
-    # Proveri da li su vrednosti uopšte različite
+    # Check if values are different at all
     temp_diff = abs(server_vals.get('temperature', 0) - client_vals.get('temperature', 0))
     humidity_diff = abs(server_vals.get('humidity', 0) - client_vals.get('humidity', 0))
     pressure_diff = abs(server_vals.get('pressure', 0) - client_vals.get('pressure', 0))
@@ -119,14 +183,14 @@ def detect_manipulation(server_vals, client_vals):
         pressure_diff >= 15 and pressure_diff <= 25  # ~20hPa
     )
     
-    # Ili bilo koja velika razlika
+    # Or any large difference
     large_differences = (
         temp_diff >= 15 or
         humidity_diff >= 20 or  
         pressure_diff >= 50 or
-        temp_diff < 0 or        # Negativne temperature
-        humidity_diff < 0 or    # Negativna vlažnost
-        pressure_diff < 0       # Negativan pritisak
+        temp_diff < 0 or        # Negative temperature
+        humidity_diff < 0 or    # Negative humidity
+        pressure_diff < 0       # Negative pressure
     )
     
     return expected_manipulation or large_differences
@@ -225,26 +289,26 @@ def is_process_running(pid_file):
         return False
 
 def start_defense_system():
-    """Pokreće defense sistem na portu 8502"""
+    """Start defense system on port 8502"""
     global defense_process, defense_enabled
     
     try:
-        # Pokreni defense sistem kao poseban proces
+        # Start defense system as separate process
         defense_process = subprocess.Popen([
             'python3', 'src/defense_module.py'
         ], cwd=ROOT)
         
         defense_enabled = True
         log_attack("DEFENSE", "Defense system started on port 8502")
-        logging.info("✅ Defense system started on port 8502")
+        logging.info("Defense system started on port 8502")
         return True
         
     except Exception as e:
-        logging.error(f"❌ Error starting defense system: {e}")
+        logging.error(f"Error starting defense system: {e}")
         return False
 
 def stop_defense_system():
-    """Zaustavlja defense sistem"""
+    """Stop defense system"""
     global defense_process, defense_enabled
     
     try:
@@ -255,18 +319,18 @@ def stop_defense_system():
         defense_enabled = False
         defense_process = None
         log_attack("DEFENSE", "Defense system stopped")
-        logging.info("🛑 Defense system stopped")
+        logging.info("Defense system stopped")
         return True
         
     except Exception as e:
-        logging.error(f"❌ Error stopping defense system: {e}")
+        logging.error(f"Error stopping defense system: {e}")
         return False
 
 def start_real_attack(attack_type):
-    """Pokreće stvarni napad u pozadini - POBOLJŠANA VERZIJA"""
+    """Start real attack in background"""
     try:
         if attack_type == 'dos':
-            # Pokreni REAL DoS napad u pozadini
+            # Start REAL DoS attack in background
             subprocess.Popen([
                 'python3', 'src/modbus_dos_attack.py', 
                 '--target', '127.0.0.1',
@@ -278,43 +342,45 @@ def start_real_attack(attack_type):
             ], cwd=ROOT)
             
         elif attack_type == 'recon':
-            # Pokreni Recon napad u pozadini
+            # Start Recon attack in background
             subprocess.Popen([
                 'python3', 'src/modbus_recon_inject.py',
                 '--target', '127.0.0.1',
+                '--port', '502',
                 '--mode', 'scan',
                 '--auto-confirm'
             ], cwd=ROOT)
             
         elif attack_type == 'inject':
-            # Pokreni Injection napad u pozadini
+            # Start Injection attack in background
             subprocess.Popen([
                 'python3', 'src/modbus_recon_inject.py',
                 '--target', '127.0.0.1', 
+                '--port', '502',
                 '--mode', 'inject',
                 '--auto-confirm'
             ], cwd=ROOT)
             
         elif attack_type == 'all':
-            # Pokreni kombinovani REAL napad
+            # Start combined REAL attack
             subprocess.Popen([
                 'python3', 'src/modbus_dos_attack.py',
                 '--target', '127.0.0.1',
-                '--port', '502', 
+                '--port', '502',  
                 '--attack', 'all',
                 '--threads', '8',
                 '--duration', '30',
                 '--auto-confirm'
             ], cwd=ROOT)
             
-        logging.info(f"✅ Started REAL {attack_type} attack")
+        logging.info(f"Started REAL {attack_type} attack")
         return True
         
     except Exception as e:
-        logging.error(f"❌ Error starting real attack: {e}")
+        logging.error(f"Error starting real attack: {e}")
         return False
 
-# === Rute ===
+# === Routes ===
 @app.route("/")
 def index():
     control = read_control()
@@ -335,7 +401,7 @@ def index():
 
 @app.route("/toggle", methods=["POST"])
 def toggle():
-    """Menja stanje manipulatora (ON/OFF)"""
+    """Toggle manipulator state (ON/OFF)"""
     control = read_control()
     new_state = not control.get("manipulate", True)
     write_control(new_state)
@@ -347,13 +413,17 @@ def toggle():
 
 @app.route("/write", methods=["POST"])
 def write_values():
-    """Ručno upisuje vrednosti preko proxy-ja"""
+    """Manually write values through proxy"""
     try:
         temp = request.form.get('temp')
         humidity = request.form.get('humidity')
         pressure = request.form.get('pressure')
         host = request.form.get('host', '127.0.0.1')
         port = int(request.form.get('port', 1502))
+        
+        # CHECK IF VALUES ARE FILLED
+        if not temp and not humidity and not pressure:
+            return jsonify({"success": False, "message": "Please enter at least one value"})
         
         from mitm_modbus_manipulator import write_register
         success = write_register(host, port, temp, humidity, pressure)
@@ -372,7 +442,7 @@ def api_values():
     values = read_all_values()
     control = read_control()
     
-    # Detektuj manipulaciju sa tolerancijom
+    # Detect manipulation with tolerance
     manipulation_detected = detect_manipulation(values['server'], values['client'])
     
     return jsonify({
@@ -383,7 +453,7 @@ def api_values():
 
 @app.route("/api/status")
 def api_status():
-    # Proveri status svih servisa
+    # Check status of all services
     server_running = is_process_running('pids/modbus_server.pid')
     client_running = is_process_running('pids/modbus_client.pid') 
     proxy_running = is_process_running('pids/modbus_proxy.pid')
@@ -397,7 +467,7 @@ def api_status():
             'active': elapsed < 30
         })
     
-    # Proveri defense status
+    # Check defense status
     defense_running = defense_enabled and (defense_process and defense_process.poll() is None)
     
     return jsonify({
@@ -423,10 +493,10 @@ def api_start_attack():
     data = request.get_json()
     attack_type = data.get("type", "recon")
     
-    # Zaustavi prethodne napade istog tipa
+    # Stop previous attacks of same type
     active_attacks[:] = [a for a in active_attacks if a['type'] != attack_type]
     
-    # Dodaj novi napad
+    # Add new attack
     attack_info = {
         "type": attack_type, 
         "start_time": time.time(),
@@ -436,7 +506,7 @@ def api_start_attack():
     
     log_attack(attack_type.upper(), f"Starting REAL {attack_type} attack")
     
-    # Pokreni STVARNI napad u pozadini
+    # Start REAL attack in background
     success = start_real_attack(attack_type)
     
     if success:
@@ -453,15 +523,15 @@ def api_start_attack():
 
 @app.route("/api/stop-attacks", methods=["POST"])
 def api_stop_attacks():
-    """Zaustavlja sve napade"""
+    """Stop all attacks"""
     stopped_count = len(active_attacks)
     active_attacks.clear()
     
-    # Ubij sve napad procese
+    # Kill all attack processes
     try:
         subprocess.run(['pkill', '-f', 'modbus_dos_attack.py'], check=False)
         subprocess.run(['pkill', '-f', 'modbus_recon_inject.py'], check=False)
-        logging.info("✅ Stopped all attack processes")
+        logging.info("Stopped all attack processes")
     except:
         pass
     
@@ -497,45 +567,51 @@ def api_toggle_defense():
 
 @app.route("/api/start-services", methods=["POST"])
 def api_start_services():
-    """Pokreće sve servise"""
+    """Start all services"""
     try:
-        # Pokreni server
+        # Start server
         subprocess.Popen(['python3', 'src/modbus_server.py'], cwd=ROOT)
         time.sleep(1)
         
-        # Pokreni proxy
+        # Start proxy
         subprocess.Popen(['python3', 'src/mitm_proxy.py'], cwd=ROOT)
         time.sleep(1)
         
-        # Pokreni client
+        # Start client
         subprocess.Popen(['python3', 'src/modbus_client.py'], cwd=ROOT)
         
+        # Start packet capture
+        start_pcap_capture()
+        
         log_attack("SYSTEM", "All services started")
-        logging.info("✅ All services started")
+        logging.info("All services started")
         return jsonify({"success": True, "message": "Services started successfully"})
     except Exception as e:
-        logging.error(f"❌ Error starting services: {e}")
+        logging.error(f"Error starting services: {e}")
         return jsonify({"success": False, "message": f"Error: {e}"})
 
 @app.route("/api/stop-services", methods=["POST"])
 def api_stop_services():
-    """Zaustavlja sve servise"""
+    """Stop all services"""
     try:
-        # Zaustavi sve procese
+        # Stop all processes
         subprocess.run(['pkill', '-f', 'modbus_server.py'], check=False)
         subprocess.run(['pkill', '-f', 'mitm_proxy.py'], check=False)
         subprocess.run(['pkill', '-f', 'modbus_client.py'], check=False)
         
+        # Stop packet capture
+        stop_pcap_capture()
+        
         log_attack("SYSTEM", "All services stopped")
-        logging.info("🛑 All services stopped")
+        logging.info("All services stopped")
         return jsonify({"success": True, "message": "Services stopped successfully"})
     except Exception as e:
-        logging.error(f"❌ Error stopping services: {e}")
+        logging.error(f"Error stopping services: {e}")
         return jsonify({"success": False, "message": f"Error: {e}"})
 
 @app.route("/api/clear-logs", methods=["POST"])
 def api_clear_logs():
-    """Briše log fajlove"""
+    """Clear log files"""
     try:
         files = ["modbus_server.log", "modbus_proxy.log", "modbus_client.log", "attack.log", "ui_server.log", "defense.log"]
         for fn in files:
@@ -544,14 +620,14 @@ def api_clear_logs():
                 open(path, 'w').close()
         
         log_attack("SYSTEM", "Logs cleared")
-        logging.info("🗑️ Logs cleared")
+        logging.info("Logs cleared")
         return jsonify({"success": True})
     except Exception as e:
-        logging.error(f"❌ Error clearing logs: {e}")
+        logging.error(f"Error clearing logs: {e}")
         return jsonify({"success": False, "error": str(e)})
 
 def get_attack_description(attack_type):
-    """Vraća opis napada za UI"""
+    """Return attack description for UI"""
     descriptions = {
         "recon": "Network scanning and reconnaissance - triggers defense with suspicious scans",
         "dos": "Denial of Service attack - flooding with malicious packets", 
@@ -561,22 +637,28 @@ def get_attack_description(attack_type):
     return descriptions.get(attack_type, "Unknown attack type")
 
 if __name__ == "__main__":
-    # Kreiraj direktorijume
+    # Create directories
     os.makedirs(LOG_DIR, exist_ok=True)
     os.makedirs(os.path.join(ROOT, "pids"), exist_ok=True)
+    os.makedirs(PCAP_DIR, exist_ok=True)
     
-    # Uveri se da control.json postoji
+    # Make sure control.json exists
     if not os.path.exists(CONTROL_FILE):
         write_control(True)
 
     print("=" * 60)
-    print("🌐 IBIS Industrial Control System Security Demo")
-    print("📊 Flask UI Server Starting...")
-    print("📍 http://127.0.0.1:8080")
+    print("IBIS Industrial Control System Security Demo")
+    print("Flask UI Server Starting...")
+    print("http://127.0.0.1:8080")
     print("=" * 60)
+    
+    # Start packet capture when UI starts
+    start_pcap_capture()
     
     try:
         app.run(host="0.0.0.0", port=8080, debug=False)
     except Exception as e:
-        print(f"❌ Greška pri pokretanju Flask servera: {e}")
+        print(f"Error starting Flask server: {e}")
+        # Stop packet capture when Flask stops
+        stop_pcap_capture()
         raise

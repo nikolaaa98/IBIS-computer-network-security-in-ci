@@ -73,7 +73,6 @@ class ModbusProxy:
                     if os.path.exists(CONTROL_FILE):
                         with open(CONTROL_FILE, "r") as f:
                             c = json.load(f)
-                        # ensure boolean
                         self.manipulate = bool(c.get("manipulate", self.manipulate))
                 except Exception:
                     pass
@@ -83,13 +82,13 @@ class ModbusProxy:
                 if regs:
                     copied = list(regs)
                     if self.manipulate:
-                        # Simple manipulation: increase temperature (reg 0) by 10, humidity (reg 1) by 5, pressure (reg 2) by 20
+                        # Simple manipulation
                         orig_temp = copied[0]
                         orig_humidity = copied[1]
                         orig_pressure = copied[2]
-                        copied[0] = max(0, orig_temp + 10)  # Temperature in °C
-                        copied[1] = min(100, orig_humidity + 5)  # Cap humidity at 100%
-                        copied[2] = max(900, min(1100, orig_pressure + 20))  # Cap pressure between 900–1100 hPa
+                        copied[0] = max(0, orig_temp + 10)
+                        copied[1] = min(100, orig_humidity + 5)
+                        copied[2] = max(900, min(1100, orig_pressure + 20))
                         logging.info(f'[PROXY] Manipulated reg0: {orig_temp} -> {copied[0]} °C, reg1: {orig_humidity} -> {copied[1]}%, reg2: {orig_pressure} -> {copied[2]} hPa')
                     DataBank.set_words(0, copied)
                 else:

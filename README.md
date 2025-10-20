@@ -66,5 +66,6 @@ python -m venv .venv
 # Install requirements
 pip install -r requirements.txt
 # Run the demo
-.\run_with_ui_mac.sh
+.\run_demo.ps1
+.\stop_demo.ps1
 ```
