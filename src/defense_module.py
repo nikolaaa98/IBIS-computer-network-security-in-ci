@@ -48,9 +48,9 @@ class RealModbusDefense:
     def start_defense(self):
         """Start defense system as a transparent proxy"""
         self.running = True
-        logging.info(f"🛡️ Starting REAL Modbus Defense on port {self.listen_port}")
-        logging.info(f"🎯 Forwarding to: {self.target_host}:{self.target_port}")
-        logging.info(f"🔒 Attack prevention: {'ENABLED' if self.attack_prevention_enabled else 'DISABLED'}")
+        logging.info(f"Starting REAL Modbus Defense on port {self.listen_port}")
+        logging.info(f"Forwarding to: {self.target_host}:{self.target_port}")
+        logging.info(f"Attack prevention: {'ENABLED' if self.attack_prevention_enabled else 'DISABLED'}")
         
         try:
             # Create listening socket
@@ -60,7 +60,7 @@ class RealModbusDefense:
             server_socket.listen(10)
             server_socket.settimeout(1)
             
-            logging.info(f"📡 Defense listening on 0.0.0.0:{self.listen_port}")
+            logging.info(f"Defense listening on 0.0.0.0:{self.listen_port}")
             
             # Start stats thread
             stats_thread = threading.Thread(target=self.log_stats, daemon=True)
@@ -73,7 +73,7 @@ class RealModbusDefense:
                     
                     # Check if IP is blocked
                     if client_ip in self.blocked_ips:
-                        logging.warning(f"🚫 Blocked connection from {client_ip}")
+                        logging.warning(f"Blocked connection from {client_ip}")
                         client_socket.close()
                         continue
                     
@@ -94,7 +94,7 @@ class RealModbusDefense:
                         logging.error(f"Accept error: {e}")
                     
         except Exception as e:
-            logging.error(f"❌ Failed to start defense: {e}")
+            logging.error(f"Failed to start defense: {e}")
         finally:
             if 'server_socket' in locals():
                 server_socket.close()
@@ -223,14 +223,14 @@ class RealModbusDefense:
 
     def log_attack(self, client_ip, attack_type, details=""):
         """Log attack detection"""
-        attack_message = f"🚨 {attack_type} from {client_ip}"
+        attack_message = f"{attack_type} from {client_ip}"
         if details:
             attack_message += f" - {details[:100]}"
         
         logging.error("=" * 70)
         logging.error(attack_message)
         if self.attack_prevention_enabled:
-            logging.error(f"🛡️ DEFENSE ACTION: Blocked {client_ip}")
+            logging.error(f"DEFENSE ACTION: Blocked {client_ip}")
         else:
             logging.error("⚠️ DEFENSE WARNING: Attack detected but prevention is DISABLED")
         logging.error("=" * 70)
@@ -258,7 +258,7 @@ class RealModbusDefense:
         """Periodically log statistics"""
         while self.running:
             try:
-                logging.info(f"🛡️ Defense Stats - Connections: {self.connections}, "
+                logging.info(f"Defense Stats - Connections: {self.connections}, "
                            f"Blocked Attacks: {self.blocked_attacks}, "
                            f"Suspicious: {self.suspicious_activities}, "
                            f"Blocked IPs: {len(self.blocked_ips)}")
@@ -270,14 +270,14 @@ class RealModbusDefense:
     def stop_defense(self):
         """Stop defense system"""
         self.running = False
-        logging.info("🛑 Stopping Modbus Defense System")
+        logging.info("Stopping Modbus Defense System")
 
 def main():
     print("=" * 70)
-    print("🛡️  REAL Modbus Defense System Starting...")
-    print("📡 Listening on port 8502 (transparent proxy)")
-    print("🎯 Forwarding to: 127.0.0.1:502")
-    print("🔒 Automatic attack blocking: ENABLED")
+    print("REAL Modbus Defense System Starting...")
+    print("Listening on port 8502 (transparent proxy)")
+    print("Forwarding to: 127.0.0.1:502")
+    print("Automatic attack blocking: ENABLED")
     print("=" * 70)
     
     # Create defense system that listens on 502 and forwards to 5020
@@ -291,7 +291,7 @@ def main():
         defense_system.start_defense()
     except KeyboardInterrupt:
         defense_system.stop_defense()
-        print("\n🛑 Defense system stopped")
+        print("\nDefense system stopped")
 
 if __name__ == "__main__":
     main()

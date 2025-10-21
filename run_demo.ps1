@@ -1,5 +1,6 @@
 # run_demo.ps1
 # IBIS Demo - Industrial Control System Security - Windows Version
+# IDENTIČNO MAC SKRIPTI
 
 Write-Host "=== IBIS Demo - Industrial Control System Security ===" -ForegroundColor Green
 
@@ -35,37 +36,49 @@ Get-ChildItem "logs\*.log" -ErrorAction SilentlyContinue | ForEach-Object {
 }
 
 Write-Host "Starting Modbus Server on port 5020..." -ForegroundColor Green
-$serverJob = Start-Job -ScriptBlock {
-    Set-Location $using:ROOT_DIR
-    python src\modbus_server.py --port 5020
+Start-Process -FilePath "python" -ArgumentList "src\modbus_server.py --port 5020" -RedirectStandardOutput "logs\modbus_server.log" -RedirectStandardError "logs\modbus_server.log" -PassThru -WindowStyle Hidden
+Start-Sleep -Seconds 2
+$serverProcess = Get-Process -Name "python" -ErrorAction SilentlyContinue | Where-Object { 
+    $_.ProcessName -eq "python" -and (Get-WmiObject Win32_Process -Filter "ProcessId = $($_.Id)").CommandLine -match "modbus_server"
 }
-$serverJob.Id | Out-File -FilePath "pids\modbus_server.pid" -Encoding ASCII
-Write-Host "Server Job ID: $($serverJob.Id) (port 5020)"
-Start-Sleep -Seconds 5
-
-Write-Host "Starting MITM Proxy on port 1502..." -ForegroundColor Green
-$proxyJob = Start-Job -ScriptBlock {
-    Set-Location $using:ROOT_DIR
-    python src\mitm_proxy.py --server-port 5020
+if ($serverProcess) {
+    $serverProcess.Id | Out-File -FilePath "pids\modbus_server.pid" -Encoding ASCII
+    Write-Host "Server PID: $($serverProcess.Id) (port 5020)"
 }
-$proxyJob.Id | Out-File -FilePath "pids\modbus_proxy.pid" -Encoding ASCII
-Write-Host "Proxy Job ID: $($proxyJob.Id) (1502 -> 5020)"
 Start-Sleep -Seconds 3
 
-Write-Host "Starting Modbus Client..." -ForegroundColor Green
-$clientJob = Start-Job -ScriptBlock {
-    Set-Location $using:ROOT_DIR
-    python src\modbus_client.py --host 127.0.0.1 --port 1502
+Write-Host "Starting MITM Proxy on port 1502..." -ForegroundColor Green
+Start-Process -FilePath "python" -ArgumentList "src\mitm_proxy.py --server-port 5020" -RedirectStandardOutput "logs\modbus_proxy.log" -RedirectStandardError "logs\modbus_proxy.log" -PassThru -WindowStyle Hidden
+Start-Sleep -Seconds 2
+$proxyProcess = Get-Process -Name "python" -ErrorAction SilentlyContinue | Where-Object { 
+    $_.ProcessName -eq "python" -and (Get-WmiObject Win32_Process -Filter "ProcessId = $($_.Id)").CommandLine -match "mitm_proxy"
 }
-$clientJob.Id | Out-File -FilePath "pids\modbus_client.pid" -Encoding ASCII
-Write-Host "Client Job ID: $($clientJob.Id) (port 1502 - PROXY)"
+if ($proxyProcess) {
+    $proxyProcess.Id | Out-File -FilePath "pids\modbus_proxy.pid" -Encoding ASCII
+    Write-Host "Proxy PID: $($proxyProcess.Id) (1502 -> 5020)"
+}
+Start-Sleep -Seconds 2
+
+Write-Host "Starting Modbus Client..." -ForegroundColor Green
+Start-Process -FilePath "python" -ArgumentList "src\modbus_client.py --host 127.0.0.1 --port 1502" -RedirectStandardOutput "logs\modbus_client.log" -RedirectStandardError "logs\modbus_client.log" -PassThru -WindowStyle Hidden
+Start-Sleep -Seconds 2
+$clientProcess = Get-Process -Name "python" -ErrorAction SilentlyContinue | Where-Object { 
+    $_.ProcessName -eq "python" -and (Get-WmiObject Win32_Process -Filter "ProcessId = $($_.Id)").CommandLine -match "modbus_client"
+}
+if ($clientProcess) {
+    $clientProcess.Id | Out-File -FilePath "pids\modbus_client.pid" -Encoding ASCII
+    Write-Host "Client PID: $($clientProcess.Id) (port 1502 - PROXY)"
+}
 Start-Sleep -Seconds 2
 
 Write-Host "Starting Web UI..." -ForegroundColor Green
-$uiProcess = Start-Process -FilePath "python" -ArgumentList "src\ui_server.py" -PassThru -WindowStyle Hidden
-$uiProcess.Id | Out-File -FilePath "pids\ui_server.pid" -Encoding ASCII
-Write-Host "UI Process ID: $($uiProcess.Id)"
-Start-Sleep -Seconds 3
+$uiProcess = Start-Process -FilePath "python" -ArgumentList "src\ui_server.py" -RedirectStandardOutput "logs\ui_server.log" -RedirectStandardError "logs\ui_server.log" -PassThru -WindowStyle Hidden
+Start-Sleep -Seconds 2
+if ($uiProcess) {
+    $uiProcess.Id | Out-File -FilePath "pids\ui_server.pid" -Encoding ASCII
+    Write-Host "UI PID: $($uiProcess.Id)"
+}
+Start-Sleep -Seconds 1
 
 Write-Host ""
 Write-Host "=== Architecture ===" -ForegroundColor Cyan
@@ -74,7 +87,8 @@ Write-Host "HMI Client -> Proxy (1502) -> Server (5020)"
 Write-Host ""
 Write-Host "=== Demo is running! ===" -ForegroundColor Green
 Write-Host "Web Interface: http://localhost:8080" -ForegroundColor Yellow
-Write-Host "Packet Capture: ACTIVE" -ForegroundColor Yellow
+Write-Host "Defense System: READY (start from UI)" -ForegroundColor Yellow
+Write-Host "Command Injection: Targets Defense System (port 502)" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Press Ctrl+C to stop the demo" -ForegroundColor Magenta
 Write-Host "==============================" -ForegroundColor Cyan
@@ -83,18 +97,7 @@ Write-Host "==============================" -ForegroundColor Cyan
 function Stop-DemoServices {
     Write-Host "`nStopping all services..." -ForegroundColor Yellow
     
-    # Stop background jobs
-    Get-Job | Where-Object { $_.Name -like "*modbus*" -or $_.Name -like "*proxy*" } | Stop-Job -PassThru | Remove-Job -Force
-    
-    # Stop UI process
-    if (Test-Path "pids\ui_server.pid") {
-        $uiPid = Get-Content "pids\ui_server.pid" -ErrorAction SilentlyContinue
-        if ($uiPid) {
-            Get-Process -Id $uiPid -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-        }
-    }
-    
-    # Kill any remaining Python processes related to our demo
+    # Kill all Python processes related to our demo
     Get-Process -Name "python", "python3" -ErrorAction SilentlyContinue | Where-Object { 
         $_.ProcessName -eq "python" -or $_.ProcessName -eq "python3" 
     } | ForEach-Object {
@@ -103,11 +106,15 @@ function Stop-DemoServices {
             $cmdline = (Get-WmiObject Win32_Process -Filter "ProcessId = $($process.Id)").CommandLine
             if ($cmdline -match "modbus_server|mitm_proxy|modbus_client|ui_server|defense_module") {
                 Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                Write-Host "Stopped: $cmdline" -ForegroundColor Red
             }
         } catch {
             # Ignore errors
         }
     }
+    
+    # Clean up PID files
+    Remove-Item "pids\*.pid" -ErrorAction SilentlyContinue
     
     Write-Host "Demo stopped successfully" -ForegroundColor Green
 }
@@ -123,21 +130,38 @@ try {
         Start-Sleep -Seconds 10
         
         # Check if UI server is still running
+        $uiRunning = $false
         if (Test-Path "pids\ui_server.pid") {
             $uiPid = Get-Content "pids\ui_server.pid" -ErrorAction SilentlyContinue
-            if ($uiPid -and -not (Get-Process -Id $uiPid -ErrorAction SilentlyContinue)) {
-                Write-Host "UI server stopped - ending demo" -ForegroundColor Red
-                break
+            if ($uiPid -and (Get-Process -Id $uiPid -ErrorAction SilentlyContinue)) {
+                $uiRunning = $true
             }
-        } else {
-            Write-Host "UI server PID file missing - ending demo" -ForegroundColor Red
+        }
+        
+        if (-not $uiRunning) {
+            Write-Host "UI server stopped - ending demo" -ForegroundColor Red
             break
         }
         
         # Optional: Check if other services are still running
-        $jobsRunning = @(Get-Job | Where-Object { $_.State -eq "Running" }).Count
-        if ($jobsRunning -eq 0) {
-            Write-Host "All background jobs stopped - ending demo" -ForegroundColor Red
+        $pythonProcesses = Get-Process -Name "python", "python3" -ErrorAction SilentlyContinue | Where-Object { 
+            $_.ProcessName -eq "python" -or $_.ProcessName -eq "python3" 
+        }
+        $demoProcesses = 0
+        
+        foreach ($process in $pythonProcesses) {
+            try {
+                $cmdline = (Get-WmiObject Win32_Process -Filter "ProcessId = $($process.Id)").CommandLine
+                if ($cmdline -match "modbus_server|mitm_proxy|modbus_client|ui_server") {
+                    $demoProcesses++
+                }
+            } catch {
+                # Ignore errors
+            }
+        }
+        
+        if ($demoProcesses -eq 0) {
+            Write-Host "All demo processes stopped - ending demo" -ForegroundColor Red
             break
         }
         

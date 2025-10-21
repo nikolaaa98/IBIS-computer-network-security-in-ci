@@ -195,6 +195,38 @@ def detect_manipulation(server_vals, client_vals):
     
     return expected_manipulation or large_differences
 
+def detect_command_injection(server_vals, client_vals):
+    """Detect command injection attacks based on extreme values"""
+    if not server_vals or not client_vals:
+        return False, None
+    
+    # Check for extreme values that indicate injection
+    extreme_patterns = []
+    
+    temp = server_vals.get('temperature', 0)
+    humidity = server_vals.get('humidity', 0)
+    pressure = server_vals.get('pressure', 0)
+    
+    # Define extreme value thresholds
+    if temp >= 1000 or temp < 0:
+        extreme_patterns.append(f"Extreme temperature: {temp}°C")
+    
+    if humidity >= 1000 or humidity < 0:
+        extreme_patterns.append(f"Extreme humidity: {humidity}%")
+    
+    if pressure >= 5000 or pressure < 0:
+        extreme_patterns.append(f"Extreme pressure: {pressure}hPa")
+    
+    # Check for specific injection patterns
+    injection_values = [0, 9999, 8888, 7777, 65535, 0xDEAD, 0xBEEF]
+    if temp in injection_values or humidity in injection_values or pressure in injection_values:
+        extreme_patterns.append("Injection pattern detected")
+    
+    if extreme_patterns:
+        return True, ", ".join(extreme_patterns)
+    
+    return False, None
+
 def read_logs(n=50):
     files = ["modbus_server.log", "modbus_proxy.log", "modbus_client.log", "attack.log", "ui_server.log", "defense.log"]
     lines = []
@@ -356,7 +388,7 @@ def start_real_attack(attack_type):
             subprocess.Popen([
                 'python3', 'src/modbus_recon_inject.py',
                 '--target', '127.0.0.1', 
-                '--port', '502',
+                '--port', '5020',
                 '--mode', 'inject',
                 '--auto-confirm'
             ], cwd=ROOT)
@@ -445,10 +477,15 @@ def api_values():
     # Detect manipulation with tolerance
     manipulation_detected = detect_manipulation(values['server'], values['client'])
     
+    # Detect command injection
+    injection_detected, injection_details = detect_command_injection(values['server'], values['client'])
+    
     return jsonify({
         "values": values,
         "control": control,
-        "manipulation_detected": manipulation_detected
+        "manipulation_detected": manipulation_detected,
+        "injection_detected": injection_detected,
+        "injection_details": injection_details
     })
 
 @app.route("/api/status")
