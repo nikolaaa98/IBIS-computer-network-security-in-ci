@@ -59,13 +59,9 @@ chmod +x run_with_ui_mac.sh stop_demo_mac.sh
 
 # 5. HOW TO RUN (WINDOWS)
 ```
-# Create virtual environment
 python -m venv .venv
-# Activate virtual environment
 .\.venv\Scripts\Activate.ps1
-# Install requirements
 pip install -r requirements.txt
-# Run the demo
 .\run_demo.ps1
 .\stop_demo.ps1
 ```

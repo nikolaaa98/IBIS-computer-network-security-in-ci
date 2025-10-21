@@ -24,7 +24,7 @@
     .service-controls { margin: 12px 0; display: flex; flex-wrap: wrap; gap: 10px; }
     .log-entry { margin: 4px 0; padding: 4px 8px; border-radius: 4px; font-family: 'Monaco', 'Menlo', monospace; font-size: 12px; }
     .timestamp { color: #888; font-size: 11px; }
-    .attack-active { background: #f8d7da !important; color: #721c24 !important; border-left: 4px solid #d9534f; }
+    .attack-active { background: #f8d7da !important; color: #721c24 !important; border-left: 4px solid #d9534f; animation: pulse 1s infinite; }
     .defense-active { background: #d1ecf1 !important; color: #0c5460 !important; border-left: 4px solid #17a2b8; }
     .alert-critical { background: #f8d7da; color: #721c24; border: 2px solid #d9534f; padding: 12px; border-radius: 6px; margin: 8px 0; }
     .alert-warning { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; padding: 10px; border-radius: 6px; margin: 6px 0; }
@@ -49,6 +49,9 @@
     .difference-positive { background: #ffebee; color: #c62828; }
     .difference-negative { background: #e8f5e8; color: #2e7d32; }
     .manipulation-alert { background: #fff3cd; border: 2px solid #ff9800; padding: 10px; border-radius: 6px; margin: 10px 0; }
+    .injection-alert { background: #ffebee; border: 3px solid #f44336; padding: 15px; border-radius: 8px; margin: 10px 0; animation: blink 1s infinite; }
+    @keyframes blink { 50% { border-color: transparent; } }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
   </style>
 </head>
 <body>
@@ -101,7 +104,7 @@
     
     <div class="comparison-grid">
       <!-- Server Values -->
-      <div class="server-values">
+      <div class="server-values" id="server-values-container">
         <h4>🔧 Server Values (Real)</h4>
         <div id="server-values">
           <div class="value-comparison">
@@ -147,15 +150,26 @@
     </div>
   </div>
 
+  <!-- Command Injection Detection -->
+  <div class="card">
+    <h3>💉 Command Injection Detection</h3>
+    <div id="injection-alerts">
+      <div class="alert-info" id="no-injection-alert">
+        No command injection detected
+      </div>
+      <div class="injection-alert hidden" id="injection-alert">
+        <strong>🚨 COMMAND INJECTION DETECTED!</strong>
+        <br>
+        <span id="injection-details"></span>
+      </div>
+    </div>
+  </div>
+
   <!-- MITM Controls -->
   <div class="card">
     <h3>🔄 MITM Manipulacija Podacima</h3>
-    <p>Trenutno: <strong id="manipulate-status" style="color: {% if control.manipulate %}#d9534f{% else %}#5cb85c{% endif %}">
-      {{ 'ON 🟢' if control.manipulate else 'OFF 🔴' }}
-    </strong></p>
-    <button class="btn {{ 'btn-danger' if control.manipulate else 'btn-success' }}" onclick="toggleManipulation()">
-      {{ '🔴 Disable Manipulation' if control.manipulate else '🟢 Enable Manipulation' }}
-    </button>
+    <p>Trenutno: <strong id="manipulate-status" style="color: #d9534f;">ON 🟢</strong></p>
+    <button class="btn btn-danger" onclick="toggleManipulation()">🔴 Disable Manipulation</button>
     <p><small>Kada je ON, proxy povećava temperaturu za 10°C, vlažnost za 5%, pritisak za 20hPa</small></p>
   </div>
 
@@ -179,16 +193,7 @@
   <div class="card">
     <h3>🚨 Attack Alerts & Defense Actions</h3>
     <div id="attack-alerts">
-      {% if attack_alerts %}
-        {% for alert in attack_alerts %}
-          <div class="alert-{{ 'critical' if 'BLOCKED' in alert.message else 'warning' }}">
-            <strong>{{ alert.timestamp.split('T')[1][:8] }}</strong> - 
-            {{ alert.message | safe }}
-          </div>
-        {% endfor %}
-      {% else %}
-        <div class="alert-info">No attack alerts detected</div>
-      {% endif %}
+      <div class="alert-info">No attack alerts detected</div>
     </div>
   </div>
 
@@ -213,8 +218,8 @@
           <button class="btn btn-secondary" type="submit" style="width: 100%;">📝 Write Values</button>
         </div>
       </div>
-      <input type="hidden" name="host" value="{{ proxy_host }}"/>
-      <input type="hidden" name="port" value="{{ proxy_port }}"/>
+      <input type="hidden" name="host" value="127.0.0.1"/>
+      <input type="hidden" name="port" value="1502"/>
     </form>
   </div>
 
@@ -232,9 +237,7 @@
       <li>✅ Automatic IP blocking (5 minutes)</li>
     </ul>
     <p><strong>Current Status:</strong> 
-      <span id="defense-info" class="status {{ 'status-running' if defense_enabled else 'status-stopped' }}">
-        {{ 'ACTIVE 🛡️' if defense_enabled else 'INACTIVE ⚠️' }}
-      </span>
+      <span id="defense-info" class="status status-stopped">INACTIVE ⚠️</span>
     </p>
   </div>
 
@@ -244,8 +247,7 @@
       <button class="btn btn-secondary" onclick="clearLogs()">🗑️ Clear</button>
       <button class="btn btn-info" onclick="toggleAutoRefresh()" id="auto-refresh-btn">🔄 Auto-Refresh: ON</button>
     </h3>
-    <pre id="logs">{% for log in logs %}{{ log | safe }}
-{% endfor %}</pre>
+    <pre id="logs">Loading logs...</pre>
   </div>
 
   <script>
@@ -253,7 +255,7 @@
     let attackEffects = {
       'recon': '🔍 Scanning network for vulnerable registers...',
       'dos': '💥 Flooding server with requests - may cause timeouts...', 
-      'inject': '💉 Injecting malicious commands - sensor values may change...',
+      'inject': '💉 Injecting malicious commands - sensor values will change dramatically!',
       'all': '⚡ Full attack chain - system under heavy load...'
     };
 
@@ -304,11 +306,27 @@
             manipulationAlert.classList.add('hidden');
           }
           
+          // Show injection alert
+          const injectionAlert = document.getElementById('injection-alert');
+          const noInjectionAlert = document.getElementById('no-injection-alert');
+          const serverContainer = document.getElementById('server-values-container');
+          
+          if (data.injection_detected) {
+            injectionAlert.classList.remove('hidden');
+            noInjectionAlert.classList.add('hidden');
+            document.getElementById('injection-details').textContent = data.injection_details;
+            serverContainer.classList.add('attack-active');
+          } else {
+            injectionAlert.classList.add('hidden');
+            noInjectionAlert.classList.remove('hidden');
+            serverContainer.classList.remove('attack-active');
+          }
+          
           // Update comparison status
           const statusElement = document.getElementById('comparison-status');
-          if (data.manipulation_detected) {
-            statusElement.innerHTML = '⚠️ <span style="color: #d9534f;">Data manipulation detected!</span>';
-          } else if (data.control.manipulate) {
+          if (data.injection_detected) {
+            statusElement.innerHTML = '💉 <span style="color: #d9534f;">Command Injection Active!</span>';
+          } else if (data.manipulation_detected) {
             statusElement.innerHTML = '🔄 <span style="color: #f0ad4e;">MITM manipulation enabled</span>';
           } else {
             statusElement.innerHTML = '✅ <span style="color: #5cb85c;">Values synchronized</span>';
@@ -318,9 +336,19 @@
         // Update manipulation status
         if (data.control) {
           const statusElem = document.querySelector('#manipulate-status');
+          const button = document.querySelector('button[onclick="toggleManipulation()"]');
           if (statusElem) {
-            statusElem.innerText = data.control.manipulate ? 'ON 🟢' : 'OFF 🔴';
-            statusElem.style.color = data.control.manipulate ? '#d9534f' : '#5cb85c';
+            if (data.control.manipulate) {
+              statusElem.innerText = 'ON 🟢';
+              statusElem.style.color = '#d9534f';
+              button.textContent = '🔴 Disable Manipulation';
+              button.className = 'btn btn-danger';
+            } else {
+              statusElem.innerText = 'OFF 🔴';
+              statusElem.style.color = '#5cb85c';
+              button.textContent = '🟢 Enable Manipulation';
+              button.className = 'btn btn-success';
+            }
           }
         }
       } catch (error) {
@@ -375,7 +403,8 @@
             const isCritical = alert.message && (
               alert.message.includes('BLOCKED') || 
               alert.message.includes('🚨') ||
-              alert.message.includes('MALICIOUS')
+              alert.message.includes('MALICIOUS') ||
+              alert.message.includes('INJECT')
             );
             const alertClass = isCritical ? 'alert-critical' : 'alert-warning';
             const timestamp = alert.timestamp ? alert.timestamp.split('T')[1].substring(0, 8) : '--:--:--';
